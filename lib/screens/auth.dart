@@ -1,6 +1,11 @@
+import 'dart:io';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat/screens/chat.dart';
+import 'package:flutter_chat/widgets/user_image.dart';
 
 final _firebaseAuth = FirebaseAuth.instance;
 
@@ -14,48 +19,84 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
 
   var _isLogin = true;
+  var _username = '';
   var _emailId = '';
   var _password = '';
+  File? _userImageFile;
+  var isAuthontication = false;
 
   void _submit() async {
     final isValid = _formKey.currentState!.validate();
-    if (!isValid) {
+
+    if (!isValid || _userImageFile == null && !_isLogin) {
       return;
     }
 
     _formKey.currentState!.save();
-
-    if (_isLogin) {
-      await _firebaseAuth.signInWithEmailAndPassword(
-        email: _emailId,
-        password: _password,
-      );
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (ctx) => ChatScreen(),
-      ));
-    } else {
-      try {
+    try {
+      setState(() {
+        isAuthontication = true;
+      });
+      if (_isLogin) {
+        await _firebaseAuth.signInWithEmailAndPassword(
+          email: _emailId,
+          password: _password,
+        );
+        goToChatScreen();
+      } else {
         final userCredential =
             await _firebaseAuth.createUserWithEmailAndPassword(
           email: _emailId,
           password: _password,
         );
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('user_profiles')
+            .child('${userCredential.user!.uid}.jpg');
+        await storageRef.putFile(_userImageFile!);
+        final imageFile = await storageRef.getDownloadURL();
+        print(imageFile);
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set({
+          'username': _username,
+          'email': _emailId,
+          'image_url': imageFile,
+        });
+
         _showSnakbarMessgae(
             'User created successfully.${userCredential.user!.email}');
-      } on FirebaseAuthException catch (error) {
-        if (error.code == 'email-already-in-use') {
-          _showSnakbarMessgae('The account already exists for that email.');
-        } else if (error.code == 'network-request-failed') {
-          _showSnakbarMessgae('Network error. Please check your connection.');
-        } else {
-          _showSnakbarMessgae(error.message ??
-              'An error occurred. Please check your credentials.');
-        }
       }
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'email-already-in-use') {
+        _showSnakbarMessgae('The account already exists for that email.');
+      } else if (error.code == 'network-request-failed') {
+        _showSnakbarMessgae('Network error. Please check your connection.');
+      } else {
+        _showSnakbarMessgae(error.message ??
+            'An error occurred. Please check your credentials.');
+      }
+      setState(() {
+        isAuthontication = false;
+      });
     }
   }
 
+  void goToChatScreen() {
+    if (!context.mounted) {
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (ctx) => ChatScreen(),
+    ));
+  }
+
   void _showSnakbarMessgae(String message) {
+    if (!context.mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -92,6 +133,31 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (!_isLogin)
+                        UserImagePicker(
+                          onPickedImage: (pickedImage) =>
+                              _userImageFile = pickedImage,
+                        ),
+                      if (!_isLogin)
+                        TextFormField(
+                          key: ValueKey('username'),
+                          enableSuggestions: false,
+                          keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
+                          textCapitalization: TextCapitalization.none,
+                          decoration: InputDecoration(labelText: 'Username'),
+                          validator: (value) {
+                            if (value == null ||
+                                value.isEmpty ||
+                                value.length < 4) {
+                              return 'Please must be at least 7 characters long.';
+                            }
+                            return null;
+                          },
+                          onSaved: (value) {
+                            _username = value!;
+                          },
+                        ),
                       TextFormField(
                         key: ValueKey('email'),
                         keyboardType: TextInputType.emailAddress,
@@ -125,24 +191,27 @@ class _AuthScreenState extends State<AuthScreen> {
                         },
                       ),
                       const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: _submit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primaryContainer,
+                      if (isAuthontication) const CircularProgressIndicator(),
+                      if (!isAuthontication)
+                        ElevatedButton(
+                          onPressed: _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primaryContainer,
+                          ),
+                          child: Text(_isLogin ? 'Login' : 'Signup'),
                         ),
-                        child: Text(_isLogin ? 'Login' : 'Signup'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _isLogin = !_isLogin;
-                          });
-                        },
-                        child: Text(_isLogin
-                            ? 'Create new account'
-                            : 'I already have an account. Login.'),
-                      ),
+                      if (!isAuthontication)
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _isLogin = !_isLogin;
+                            });
+                          },
+                          child: Text(_isLogin
+                              ? 'Create new account'
+                              : 'I already have an account. Login.'),
+                        ),
                     ],
                   ),
                 ),
