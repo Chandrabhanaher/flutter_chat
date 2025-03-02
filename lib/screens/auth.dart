@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_chat/screens/chat.dart';
 
 final _firebaseAuth = FirebaseAuth.instance;
 
@@ -29,6 +30,9 @@ class _AuthScreenState extends State<AuthScreen> {
         email: _emailId,
         password: _password,
       );
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (ctx) => ChatScreen(),
+      ));
     } else {
       try {
         final userCredential =
