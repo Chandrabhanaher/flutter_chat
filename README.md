@@ -4,8 +4,11 @@ A new Flutter project.
 
 # Functionality
   User login authotication using Firebase
+  
   Store Chat on Firebase Cloud Firestore
+  
   Upload image on the Firebase storage
+  
   Chaptuer images uisng image picker 
 
 ## Getting Started
